@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.0"
+#define PLUGIN_VERSION		"1.1"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+1.1 (12-Jan-2024)
+	- Data config now supports any melee script name, including those from 3rd party maps.
+	- Fixed switching weapons being able to bypass the melee time.
+	- Fixed glitches with constantly shooting if the melee delay was less than 0.1.
 
 1.0 (11-Jan-2024)
 	- Initial release.
@@ -54,24 +59,6 @@ bool g_bCvarAllow, g_bIgnored;
 Handle g_hSDK_TrySwing;
 StringMap g_hTimes;
 StringMap g_hMelee;
-
-char g_sMeleeScripts[][] =
-{
-	// "generic",
-	"baseball_bat",
-	"cricket_bat",
-	"crowbar",
-	"electric_guitar",
-	"fireaxe",
-	"frying_pan",
-	"golfclub",
-	"katana",
-	"knife",
-	"machete",
-	"tonfa",
-	"pitchfork",
-	"shovel"
-};
 
 
 
@@ -151,21 +138,12 @@ public void OnPluginStart()
 
 
 	// =========================
-	// DATA
+	// COMMAND
 	// =========================
 	RegAdminCmd("sm_melee_fatigue_reload", CmdReload, ADMFLAG_ROOT);
 
-	g_hTimes = new StringMap();
-	for( int i = 0; i < sizeof(g_sMeleeScripts); i++ )
-	{
-		g_hTimes.SetValue(g_sMeleeScripts[i], 0.0);
-	}
-
 	g_hMelee = new StringMap();
-	for( int i = 0; i < sizeof(g_sMeleeScripts); i++ )
-	{
-		g_hMelee.SetValue(g_sMeleeScripts[i], i);
-	}
+	g_hTimes = new StringMap();
 }
 
 
@@ -204,10 +182,26 @@ void IsAllowed()
 	if( g_bCvarAllow == false && bAllow == true && bAllowMode == true )
 	{
 		g_bCvarAllow = true;
+
+		for( int i = 1; i <= MaxClients; i++ )
+		{
+			if( IsClientInGame(i) )
+			{
+				SDKHook(i, SDKHook_WeaponSwitchPost, OnWeaponSwitch);
+			}
+		}
 	}
 	else if( g_bCvarAllow == true && (bAllow == false || bAllowMode == false) )
 	{
 		g_bCvarAllow = false;
+
+		for( int i = 1; i <= MaxClients; i++ )
+		{
+			if( IsClientInGame(i) )
+			{
+				SDKUnhook(i, SDKHook_WeaponSwitchPost, OnWeaponSwitch);
+			}
+		}
 	}
 }
 
@@ -286,6 +280,10 @@ Action CmdReload(int client, int args)
 
 void LoadData()
 {
+	g_hMelee.Clear();
+	g_hTimes.Clear();
+
+	// Verify config exists
 	char sPath[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, sPath, sizeof(sPath), CONFIG_DATA);
 	if( FileExists(sPath) == false )
@@ -302,28 +300,60 @@ void LoadData()
 		return;
 	}
 
+	// Grab entries
 	int meleeID;
+	char script[64];
 
-	for( int i = 0; i < sizeof(g_sMeleeScripts); i++ )
+	hFile.GotoFirstSubKey(true);
+	do
 	{
-		ReadData(hFile, g_sMeleeScripts[i]);
-		
-		meleeID = L4D2_GetMeleeWeaponIndex(g_sMeleeScripts[i]);
-		g_hMelee.SetValue(g_sMeleeScripts[i], meleeID);
+		// Get melee name from config
+		hFile.GetSectionName(script, sizeof(script));
+
+		// Get "time" value
+		g_hTimes.SetValue(script, hFile.GetFloat("time", 0.0));
+
+		// Get melee ID (changes each map)
+		meleeID = L4D2_GetMeleeWeaponIndex(script);
+
+		// Set melee ID
+		g_hMelee.SetValue(script, meleeID);
+
+		// Debug
+		// PrintToServer("[%s] %d @ %f", script, meleeID, hFile.GetFloat("time", 0.0));
 	}
+	while( hFile.GotoNextKey(false) );
 
 	delete hFile;
 }
 
-void ReadData(KeyValues hFile, const char [] script)
+
+
+// ====================================================================================================
+//					HOOKS
+// ====================================================================================================
+public void OnClientPutInServer(int client)
 {
-	if( hFile.JumpToKey(script) )
-	{
-		g_hTimes.SetValue(script, hFile.GetFloat("time", 0.0));
-		hFile.Rewind();
-	}
+	SDKHook(client, SDKHook_WeaponSwitchPost, OnWeaponSwitch);
 }
 
+// Set weapon attack time when switching weapons, otherwise it glitches with constant firing
+void OnWeaponSwitch(int client, int weapon)
+{
+	weapon = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
+	if( weapon != -1 )
+	{
+		// Block melee weapon swing when shoving
+		static char class[16];
+		GetEdictClassname(weapon, class, sizeof(class));
+
+		if( strncmp(class[7], "melee", 5) == 0 )
+		{
+			float time = GetEntPropFloat(client, Prop_Send, "m_flNextShoveTime");
+			SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", time + 0.1);
+		}
+	}
+}
 
 
 // ====================================================================================================
@@ -394,12 +424,19 @@ public void L4D_OnStartMeleeSwing_Post(int client, bool boolean)
 			}
 
 			// If next shove time is sooner than the melee refire delay, use the melee refire delay
-			float time = GetEntPropFloat(client, Prop_Send, "m_flNextShoveTime") + 0.4 + cool;
+			float time = GetEntPropFloat(client, Prop_Send, "m_flNextShoveTime") + 0.4 + cool; // Don't know why + 0.4 but without this shoving/swinging melee will be allowed sooner than it should
 			if( time - GetGameTime() < delay )
 			{
 				time = GetGameTime() + delay + cool;
 			}
+
+			// Prevent constant shooting glitches
+			if( time < GetGameTime() )
+			{
+				time = GetGameTime() + 0.1;
+			}
 	
+			// Set shove/attack times
 			SetEntPropFloat(client, Prop_Send, "m_flNextShoveTime", time);
 			SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", time + 0.1);
 		}
