@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.1"
+#define PLUGIN_VERSION		"1.2"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.2 (13-Jan-2024)
+	- Fixed the plugin affecting some clients when the plugin is disabled.
 
 1.1 (12-Jan-2024)
 	- Data config now supports any melee script name, including those from 3rd party maps.
@@ -334,7 +337,10 @@ void LoadData()
 // ====================================================================================================
 public void OnClientPutInServer(int client)
 {
-	SDKHook(client, SDKHook_WeaponSwitchPost, OnWeaponSwitch);
+	if( g_bCvarAllow )
+	{
+		SDKHook(client, SDKHook_WeaponSwitchPost, OnWeaponSwitch);
+	}
 }
 
 // Set weapon attack time when switching weapons, otherwise it glitches with constant firing
@@ -354,6 +360,7 @@ void OnWeaponSwitch(int client, int weapon)
 		}
 	}
 }
+
 
 
 // ====================================================================================================
