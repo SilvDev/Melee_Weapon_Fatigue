@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.2"
+#define PLUGIN_VERSION		"1.3"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.3 (25-Jan-2024)
+	- Fixed memory leak caused by clearing StringMap/ArrayList data instead of deleting.
 
 1.2 (13-Jan-2024)
 	- Fixed the plugin affecting some clients when the plugin is disabled.
@@ -143,7 +146,7 @@ public void OnPluginStart()
 	// =========================
 	// COMMAND
 	// =========================
-	RegAdminCmd("sm_melee_fatigue_reload", CmdReload, ADMFLAG_ROOT);
+	RegAdminCmd("sm_melee_fatigue_reload", CmdReload, ADMFLAG_ROOT, "Reloads the Melee Weapon Fatigue data config.");
 
 	g_hMelee = new StringMap();
 	g_hTimes = new StringMap();
@@ -283,8 +286,13 @@ Action CmdReload(int client, int args)
 
 void LoadData()
 {
-	g_hMelee.Clear();
-	g_hTimes.Clear();
+	// .Clear() is creating a memory leak
+	// g_hMelee.Clear();
+	// g_hTimes.Clear();
+	delete g_hMelee;
+	delete g_hTimes;
+	g_hMelee = new StringMap();
+	g_hTimes = new StringMap();
 
 	// Verify config exists
 	char sPath[PLATFORM_MAX_PATH];
