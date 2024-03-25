@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.3"
+#define PLUGIN_VERSION		"1.4"
 
 /*=======================================================================================
 	Plugin Info:
@@ -32,7 +32,10 @@
 ========================================================================================
 	Change Log:
 
-1.3 (25-Jan-2024)
+1.4 (25-Mar-2024)
+	- Fixed melee swings shoving the victim. Thanks to "lower_oil" for reporting and "HarryPotter" for testing.
+
+1.3 (28-Jan-2024)
 	- Fixed memory leak caused by clearing StringMap/ArrayList data instead of deleting.
 
 1.2 (13-Jan-2024)
@@ -60,7 +63,7 @@
 
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarGunInt, g_hCvarGunDur, g_hCvarGunRan;
-float g_fCvarGunInt, g_fCvarGunDur, g_fCvarGunRan;
+float g_fCvarGunInt, g_fCvarGunDur, g_fCvarGunRan, g_fLastSwing[MAXPLAYERS+1];
 bool g_bCvarAllow, g_bIgnored;
 Handle g_hSDK_TrySwing;
 StringMap g_hTimes;
@@ -374,22 +377,42 @@ void OnWeaponSwitch(int client, int weapon)
 // ====================================================================================================
 //					FORWARDS
 // ====================================================================================================
+public Action L4D_OnShovedBySurvivor(int client, int victim, const float vecDir[3])
+{
+	if( g_fLastSwing[client] > GetGameTime() ) return Plugin_Handled;
+
+	return Plugin_Continue;
+}
+
+public Action L4D2_OnEntityShoved(int client, int entity, int weapon, float vecDir[3], bool bIsHighPounce)
+{
+	if( g_fLastSwing[client] > GetGameTime() ) return Plugin_Handled;
+
+	return Plugin_Continue;
+}
+
+
 // When shoving, set melee weapon attack time to prevent primary attack before shove penalty finishes
 public void L4D_OnSwingStart(int client, int weapon)
 {
-	if( g_bCvarAllow && !g_bIgnored && weapon != -1 )
+	if( g_bCvarAllow && weapon != -1 )
 	{
-		// Block melee weapon swing when shoving
-		static char class[16];
-		GetEdictClassname(weapon, class, sizeof(class));
-
-		if( strncmp(class[7], "melee", 5) == 0 )
+		if( !g_bIgnored )
 		{
-			float time = GetEntPropFloat(client, Prop_Send, "m_flNextShoveTime");
-			SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", time + 0.1);
+			// Block melee weapon swing when shoving
+			static char class[16];
+			GetEdictClassname(weapon, class, sizeof(class));
+
+			if( strncmp(class[7], "melee", 5) == 0 )
+			{
+				float time = GetEntPropFloat(client, Prop_Send, "m_flNextShoveTime");
+				SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", time + 0.1);
+			}
 		}
 	}
 }
+
+
 
 // If shoving is blocked, prevent melee weapon attack
 public Action L4D_OnStartMeleeSwing(int client, bool boolean)
@@ -418,6 +441,7 @@ public void L4D_OnStartMeleeSwing_Post(int client, bool boolean)
 		{
 			// Calls to calculate shove penalty cooldown
 			g_bIgnored = true;
+			g_fLastSwing[client] = GetGameTime() + 0.5;
 			SDKCall(g_hSDK_TrySwing, weapon, g_fCvarGunInt, g_fCvarGunDur, g_fCvarGunRan);
 			g_bIgnored = false;
 
