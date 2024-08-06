@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.4"
+#define PLUGIN_VERSION		"1.5"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.5 (06-Aug-2024)
+	- Fixed playing the shove sound when using melee weapons. Thanks to "Tighty Whitey" for reporting.
 
 1.4 (25-Mar-2024)
 	- Fixed melee swings shoving the victim. Thanks to "lower_oil" for reporting and "HarryPotter" for testing.
@@ -184,7 +187,7 @@ void GetCvars()
 
 void IsAllowed()
 {
-	bool bAllow = GetConVarBool(g_hCvarAllow);
+	bool bAllow = g_hCvarAllow.BoolValue;
 	bool bAllowMode = IsAllowedGameMode();
 	GetCvars();
 
@@ -199,6 +202,8 @@ void IsAllowed()
 				SDKHook(i, SDKHook_WeaponSwitchPost, OnWeaponSwitch);
 			}
 		}
+
+		AddNormalSoundHook(SoundHook);
 	}
 	else if( g_bCvarAllow == true && (bAllow == false || bAllowMode == false) )
 	{
@@ -211,6 +216,8 @@ void IsAllowed()
 				SDKUnhook(i, SDKHook_WeaponSwitchPost, OnWeaponSwitch);
 			}
 		}
+
+		RemoveNormalSoundHook(SoundHook);
 	}
 }
 
@@ -372,6 +379,20 @@ void OnWeaponSwitch(int client, int weapon)
 	}
 }
 
+Action SoundHook(int clients[64], int &numClients, char sample[PLATFORM_MAX_PATH], int &entity, int &channel, float &volume, int &level, int &pitch, int &flags)
+{
+	if( g_bIgnored )
+	{
+		if( strncmp(sample, ")player/survivor/swing", 22) == 0 )
+		{
+			volume = 0.0;
+			return Plugin_Changed;
+		}
+	}
+
+	return Plugin_Continue;
+}
+
 
 
 // ====================================================================================================
@@ -440,8 +461,8 @@ public void L4D_OnStartMeleeSwing_Post(int client, bool boolean)
 		if( weapon != -1 )
 		{
 			// Calls to calculate shove penalty cooldown
-			g_bIgnored = true;
 			g_fLastSwing[client] = GetGameTime() + 0.5;
+			g_bIgnored = true;
 			SDKCall(g_hSDK_TrySwing, weapon, g_fCvarGunInt, g_fCvarGunDur, g_fCvarGunRan);
 			g_bIgnored = false;
 
