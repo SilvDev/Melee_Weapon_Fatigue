@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.5"
+#define PLUGIN_VERSION		"1.6"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.6 (13-Aug-2024)
+	- Fixed playing the shove sound when hitting with melee weapons. Thanks to "Tighty Whitey" for reporting.
 
 1.5 (06-Aug-2024)
 	- Fixed playing the shove sound when using melee weapons. Thanks to "Tighty Whitey" for reporting.
@@ -388,6 +391,12 @@ Action SoundHook(int clients[64], int &numClients, char sample[PLATFORM_MAX_PATH
 			volume = 0.0;
 			return Plugin_Changed;
 		}
+	}
+
+	if( entity > 0 && entity <= MaxClients && g_fLastSwing[entity] > GetGameTime() && strcmp(sample, "player/survivor/hit/rifle_swing_hit_world.wav") == 0 )
+	{
+		volume = 0.0;
+		return Plugin_Changed;
 	}
 
 	return Plugin_Continue;
