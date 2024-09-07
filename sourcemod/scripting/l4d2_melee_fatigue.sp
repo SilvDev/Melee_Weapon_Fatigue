@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.6"
+#define PLUGIN_VERSION		"1.7"
 
 /*=======================================================================================
 	Plugin Info:
@@ -32,8 +32,11 @@
 ========================================================================================
 	Change Log:
 
+1.7 (07-Sep-2024)
+	- Fixed playing the shove sound when hitting common with melee weapons. Thanks to "Tighty Whitey" for reporting.
+
 1.6 (13-Aug-2024)
-	- Fixed playing the shove sound when hitting with melee weapons. Thanks to "Tighty Whitey" for reporting.
+	- Fixed playing the shove sound when hitting walls with melee weapons. Thanks to "Tighty Whitey" for reporting.
 
 1.5 (06-Aug-2024)
 	- Fixed playing the shove sound when using melee weapons. Thanks to "Tighty Whitey" for reporting.
@@ -442,8 +445,6 @@ public void L4D_OnSwingStart(int client, int weapon)
 	}
 }
 
-
-
 // If shoving is blocked, prevent melee weapon attack
 public Action L4D_OnStartMeleeSwing(int client, bool boolean)
 {
@@ -470,7 +471,7 @@ public void L4D_OnStartMeleeSwing_Post(int client, bool boolean)
 		if( weapon != -1 )
 		{
 			// Calls to calculate shove penalty cooldown
-			g_fLastSwing[client] = GetGameTime() + 0.5;
+			g_fLastSwing[client] = GetGameTime() + 1.5;
 			g_bIgnored = true;
 			SDKCall(g_hSDK_TrySwing, weapon, g_fCvarGunInt, g_fCvarGunDur, g_fCvarGunRan);
 			g_bIgnored = false;
