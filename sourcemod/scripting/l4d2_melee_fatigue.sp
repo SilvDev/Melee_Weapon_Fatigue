@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.7"
+#define PLUGIN_VERSION		"1.8"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (05-Nov-2024)
+	- Fixed immediately swinging after switching weapons. Thanks to "TBK Duy" for reporting.
+	- Fixed the "Tonfa" from "Riot" zombies, and possibly other melee weapons not being recognized when missing their script name.
 
 1.7 (07-Sep-2024)
 	- Fixed playing the shove sound when hitting common with melee weapons. Thanks to "Tighty Whitey" for reporting.
@@ -380,7 +384,9 @@ void OnWeaponSwitch(int client, int weapon)
 		if( strncmp(class[7], "melee", 5) == 0 )
 		{
 			float time = GetEntPropFloat(client, Prop_Send, "m_flNextShoveTime");
+			if( time < GetGameTime() ) time = GetGameTime() + 0.5;
 			SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", time + 0.1);
+			g_fLastSwing[client] = GetGameTime() + 1.5;
 		}
 	}
 }
@@ -481,6 +487,29 @@ public void L4D_OnStartMeleeSwing_Post(int client, bool boolean)
 			static char script[32];
 
 			GetEntPropString(weapon, Prop_Data, "m_strMapSetScriptName", script, sizeof(script));
+
+			// Fix melee weapons that don't have a script name
+			if( script[0] == 0 )
+			{
+				GetEntPropString(weapon, Prop_Data, "m_ModelName", script, sizeof(script));
+
+				if( strncmp(script[23], "bat", 3) == 0 ) script = "bat";
+				else if( strncmp(script[23], "cri", 3) == 0 ) script = "cricket_bat";
+				else if( strncmp(script[23], "cro", 3) == 0 ) script = "crowbar";
+				else if( strncmp(script[23], "ele", 3) == 0 ) script = "electric_guitar";
+				else if( strncmp(script[23], "fir", 3) == 0 ) script = "fireaxe";
+				else if( strncmp(script[23], "fry", 3) == 0 ) script = "frying_pan";
+				else if( strncmp(script[23], "gol", 3) == 0 ) script = "golfclub";
+				else if( strncmp(script[23], "kat", 3) == 0 ) script = "katana";
+				else if( strncmp(script[23], "kni", 3) == 0 ) script = "knife";
+				else if( strncmp(script[23], "mac", 3) == 0 ) script = "machete";
+				else if( strncmp(script[23], "ton", 3) == 0 ) script = "tonfa";
+				else if( strncmp(script[23], "pit", 3) == 0 ) script = "pitchfork";
+				else if( strncmp(script[23], "sho", 3) == 0 ) script = "shovel";
+
+				if( script[0] ) SetEntPropString(weapon, Prop_Data, "m_strMapSetScriptName", script);
+			}
+
 			g_hTimes.GetValue(script, cool);
 
 			// Block next melee attack according to cooldpwn time
